@@ -16,6 +16,8 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from dotenv import load_dotenv; load_dotenv()  # Load cookies + api keys
+
 from radar.storage import (get_recent_topics, get_topic_history, get_tracked_content,
                            get_daily_summary, init_db, DB_PATH)
 from radar.analyze import (analyze_propagation, detect_burst, generate_ai_summary,
