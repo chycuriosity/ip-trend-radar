@@ -40,8 +40,8 @@ def _normalize_item(item: dict, platform: str, topic_label: str) -> Optional[dic
     if not title or len(str(title)) < 2:
         return None
 
-    # Skip comment-only entries
-    if "comment_id" in item and "note_id" not in item and "id" not in item:
+    # Skip comment entries (they have comment_id field)
+    if "comment_id" in item:
         return None
 
     likes = comments = shares = views = collects = 0
