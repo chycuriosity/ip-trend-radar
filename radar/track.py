@@ -152,7 +152,6 @@ def run_tracking(topic_label: str, keywords: list[str], platforms: Optional[list
         ]
 
         try:
-            # Write stdout/stderr to files to avoid encoding issues
             log_file = Path(output_dir) / "crawl.log"
             log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(log_file, "w", encoding="utf-8") as log:
@@ -160,13 +159,24 @@ def run_tracking(topic_label: str, keywords: list[str], platforms: Optional[list
                     cmd,
                     cwd=str(MEDIACRAWLER_DIR),
                     stdout=log,
-                    stderr=log,
+                    stderr=subprocess.STDOUT,
                     timeout=300,
-                    env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONLEGACYWINDOWSSTDIO": "utf-8"},
                 )
+
+            # Dump log for debugging
+            if log_file.exists():
+                log_content = log_file.read_text(encoding="utf-8", errors="replace")
+                # Print last 10 lines of relevant output
+                for line in log_content.split("\n")[-15:]:
+                    if line.strip():
+                        print(f"    {line[:150]}")
 
             if result.returncode == 0:
                 items = _parse_output(output_dir, pid, topic_label)
+                if not items:
+                    # Also check crawler's own data dir
+                    alt_dir = MEDIACRAWLER_DIR / "data"
+                    items = _parse_output(str(alt_dir), pid, topic_label)
                 print(f"  [{pid}] OK: {len(items)} items")
                 all_results.extend(items)
             else:
