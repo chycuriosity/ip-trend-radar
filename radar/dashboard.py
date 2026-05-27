@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import io
-import subprocess
+import time
 import zipfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -75,16 +75,89 @@ def run_discover():
         return []
 
 
-def run_track(topic: str, keywords: str):
-    """Run tracking locally."""
+def trigger_actions_track(topic: str, keywords: str):
+    """Trigger GitHub Actions track workflow and wait for completion."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+    }
+
+    # 1. Trigger workflow
+    resp = requests.post(
+        f"https://api.github.com/repos/{REPO}/actions/workflows/track.yml/dispatches",
+        json={"ref": "main", "inputs": {"topic": topic, "keywords": keywords}},
+        headers=headers, timeout=15)
+    if resp.status_code != 204:
+        st.error(f"触发失败: {resp.status_code}")
+        return
+
+    st.success("已触发追踪任务")
+
+    # 2. Poll for the new run
+    progress = st.progress(0, "等待任务启动...")
+    for i in range(5):
+        import time
+        time.sleep(5)
+        runs_resp = requests.get(
+            f"https://api.github.com/repos/{REPO}/actions/runs?status=in_progress&event=workflow_dispatch&per_page=3",
+            headers=headers, timeout=10)
+        runs = runs_resp.json().get("workflow_runs", [])
+        if runs:
+            run_id = runs[0]["id"]
+            run_url = runs[0]["html_url"]
+            break
+    else:
+        progress.empty()
+        st.warning("任务未启动，请稍后手动刷新数据")
+        return
+
+    # 3. Poll for completion
+    progress.progress(10, f"追踪运行中... [查看]({run_url})")
+    for i in range(36):  # Max 18 minutes
+        import time
+        time.sleep(30)
+        run_resp = requests.get(
+            f"https://api.github.com/repos/{REPO}/actions/runs/{run_id}",
+            headers=headers, timeout=10)
+        status = run_resp.json().get("status", "")
+        conclusion = run_resp.json().get("conclusion", "")
+        pct = min(90, 10 + i * 3)
+        progress.progress(pct, f"追踪中... {pct}% [查看]({run_url})")
+
+        if status == "completed":
+            if conclusion == "success":
+                progress.progress(100, "追踪完成！下载结果中...")
+                break
+            else:
+                progress.empty()
+                st.error(f"追踪失败 [查看日志]({run_url})")
+                return
+
+    # 4. Download results
+    if download_latest_data():
+        load_topics.clear()
+        progress.empty()
+        st.success(f"追踪完成！[查看结果]({run_url}) → 左侧「话题详情」查看「{topic}」")
+        st.rerun()
+    else:
+        progress.empty()
+        st.warning(f"追踪完成但下载数据失败 [手动查看]({run_url})")
+
+
+def run_discover():
+    """Run discovery locally."""
     status = st.empty()
-    status.info(f"正在追踪「{topic}」...")
+    status.info("正在采集热榜...")
     try:
-        from radar.track import run_tracking
-        kw = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else [topic]
-        results = run_tracking(topic, kw)
-        status.success(f"完成！找到 {len(results)} 条内容")
-        return results
+        from radar.discover import run_discovery as rd
+        progress = st.progress(0, "采集热榜中...")
+        topics = rd()
+        progress.progress(100, "完成！")
+        progress.empty()
+        load_topics.clear()
+        status.success(f"完成！发现 {len(topics)} 个热点，刷新页面查看")
+        return topics
     except Exception as e:
         status.error(f"失败: {e}")
         return []
@@ -93,38 +166,43 @@ def run_track(topic: str, keywords: str):
 # ── Sidebar ──────────────────────────────────────────────────
 
 st.sidebar.title("控制台")
+st.sidebar.caption("所有操作在左上角「导航」选页面查看结果")
 
 # Data source
-st.sidebar.subheader("数据")
+st.sidebar.subheader("数据采集")
 c1, c2 = st.sidebar.columns(2)
-if c1.button("刷新数据", use_container_width=True):
+if c1.button("刷新数据", use_container_width=True, help="从服务器下载最新热点"):
     load_topics.clear()
     if download_latest_data():
-        c1.success("已更新")
+        st.success("数据已更新")
         st.rerun()
     else:
-        c1.warning("无新数据")
+        st.warning("无新数据，稍后重试")
 
-if c2.button("运行发现", use_container_width=True, type="primary"):
+if c2.button("运行发现", use_container_width=True, type="primary", help="立即扫描全网热点"):
     run_discover()
-    load_topics.clear()
     st.rerun()
 
 # Track section
 st.sidebar.divider()
 st.sidebar.subheader("深度追踪")
-track_topic = st.sidebar.text_input("话题名称", placeholder="如：关晓彤剧宣人脉")
-track_keywords = st.sidebar.text_input("搜索关键词", placeholder="关晓彤,剧宣")
-if st.sidebar.button("启动追踪", use_container_width=True):
+st.sidebar.caption("通过 GitHub Actions 在云端追踪，约 15 分钟完成")
+track_topic = st.sidebar.text_input("话题名称", placeholder="如：关晓彤剧宣人脉",
+                                     key="track_topic_input")
+track_keywords = st.sidebar.text_input("搜索关键词", placeholder="关晓彤,剧宣",
+                                        key="track_kw_input")
+if st.sidebar.button("启动追踪", use_container_width=True, type="primary"):
     if track_topic:
-        run_track(track_topic, track_keywords or track_topic)
-        st.rerun()
+        trigger_actions_track(track_topic, track_keywords or track_topic)
     else:
         st.sidebar.warning("请输入话题名称")
 
 st.sidebar.divider()
 st.sidebar.caption(f"仓库: {REPO}")
 st.sidebar.caption(f"数据: {'已加载' if Path(DB_PATH).exists() else '无'}")
+db_mtime = Path(DB_PATH).stat().st_mtime if Path(DB_PATH).exists() else 0
+if db_mtime:
+    st.sidebar.caption(f"更新: {datetime.fromtimestamp(db_mtime, TZ).strftime('%m-%d %H:%M')}")
 
 # ── Navigation ───────────────────────────────────────────────
 
