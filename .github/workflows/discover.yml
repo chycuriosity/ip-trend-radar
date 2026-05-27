@@ -30,7 +30,6 @@ jobs:
 
       - name: Run discovery
         env:
-          HF_ENDPOINT: https://hf-mirror.com
           PYTHONIOENCODING: utf-8
         run: uv run python run.py discover
 
