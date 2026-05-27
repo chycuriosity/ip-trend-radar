@@ -13,12 +13,20 @@ from .storage import init_db, save_tracked_content
 
 TZ = timezone(timedelta(hours=8))
 
-MEDIACRAWLER_DIR = Path(__file__).parent.parent / "crawler"
-MEDIACRAWLER_PYTHON = MEDIACRAWLER_DIR / ".venv" / "Scripts" / "python.exe"
-
-# On Linux (GitHub Actions), Python is in .venv/bin/python
-if not MEDIACRAWLER_PYTHON.exists():
-    MEDIACRAWLER_PYTHON = MEDIACRAWLER_DIR / ".venv" / "bin" / "python"
+# Priority: 1) Parent dir MediaCrawler (local dev)  2) crawler submodule (GitHub Actions)
+for candidate in [
+    Path(__file__).parent.parent.parent / "MediaCrawler",
+    Path(__file__).parent.parent / "crawler",
+]:
+    for py in [candidate / ".venv" / "Scripts" / "python.exe",  # Windows
+               candidate / ".venv" / "bin" / "python"]:         # Linux
+        if py.exists():
+            MEDIACRAWLER_DIR = candidate
+            MEDIACRAWLER_PYTHON = py
+            break
+    else:
+        continue
+    break
 
 
 def load_config(path: str = "config.yaml") -> dict:
