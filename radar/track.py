@@ -136,7 +136,8 @@ def run_tracking(topic_label: str, keywords: list[str], platforms: Optional[list
             print(f"[track] Skipping {p['name']}: no cookie (env {env_key})")
             continue
 
-        output_dir = str((Path("data") / "tracking" / f"{topic_label.replace('/', '_')}_{pid}").absolute())
+        base = Path(__file__).parent.parent  # ip-trend-radar root
+        output_dir = str((base / "data" / "tracking" / f"{topic_label.replace('/', '_')}_{pid}").absolute())
         print(f"[track] {p['name']}: searching '{keyword_str}'...")
 
         cmd = [
