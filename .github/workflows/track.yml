@@ -35,6 +35,8 @@ jobs:
 
       - name: Setup MediaCrawler
         working-directory: crawler
+        env:
+          UV_INDEX_URL: https://pypi.org/simple
         run: |
           uv sync
           uv run playwright install chromium --with-deps
