@@ -2,22 +2,70 @@
 import json
 import os
 import sys
+import io
+import zipfile
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from radar.storage import get_recent_topics, get_topic_history, get_tracked_content, get_daily_summary
+from radar.storage import get_recent_topics, get_topic_history, get_tracked_content, get_daily_summary, init_db, DB_PATH
 from radar.analyze import analyze_propagation, detect_burst, generate_ai_summary, generate_daily_report
 
 TZ = timezone(timedelta(hours=8))
+REPO = "chycuriosity/ip-trend-radar"
+
+
+def download_latest_data():
+    """Download latest trend data from GitHub Actions artifact."""
+    db_file = Path(DB_PATH)
+    if db_file.exists():
+        age_hours = (datetime.now().timestamp() - db_file.stat().st_mtime) / 3600
+        if age_hours < 3:
+            return  # Data is fresh enough
+
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        # List recent workflow runs
+        runs_url = f"https://api.github.com/repos/{REPO}/actions/runs?status=success&per_page=5"
+        runs_resp = requests.get(runs_url, headers=headers, timeout=10)
+        runs = runs_resp.json().get("workflow_runs", [])
+
+        for run in runs:
+            artifacts_url = run["artifacts_url"]
+            art_resp = requests.get(artifacts_url, headers=headers, timeout=10)
+            artifacts = art_resp.json().get("artifacts", [])
+            for art in artifacts:
+                if art["name"] == "trend-data" and not art["expired"]:
+                    # Download artifact
+                    dl_url = art["archive_download_url"]
+                    dl_resp = requests.get(dl_url, headers=headers, timeout=30)
+                    if dl_resp.status_code == 200:
+                        db_file.parent.mkdir(parents=True, exist_ok=True)
+                        with zipfile.ZipFile(io.BytesIO(dl_resp.content)) as zf:
+                            zf.extractall(db_file.parent)
+                        init_db()
+                        st.sidebar.success(f"Data updated: {datetime.now(TZ).strftime('%H:%M')}")
+                        return
+    except Exception as e:
+        st.sidebar.warning(f"Could not auto-update data: {e}")
+
 
 st.set_page_config(page_title="IP Trend Radar", page_icon="", layout="wide")
 st.title("IP Trend Radar — 全网热点追踪")
+
+# Auto-download data on startup
+download_latest_data()
 
 
 def load_topics():
