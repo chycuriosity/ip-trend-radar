@@ -79,16 +79,18 @@ def _normalize_item(item: dict, platform: str, topic_label: str) -> Optional[dic
         user = item.get("user", {}) if isinstance(item.get("user"), dict) else {}
         author_name = user.get("nickname") or user.get("nick_name", "")
 
-    # Extract creation time
+    # Extract creation time (handle both seconds and milliseconds)
     created_at = ""
     for ts_key in ["create_time", "created_time", "create_date_time", "time", "pubdate", "ctime"]:
         ts = item.get(ts_key)
         if ts:
             if isinstance(ts, (int, float)):
+                if ts > 1000000000000:  # milliseconds
+                    ts = ts / 1000
                 if ts > 1000000000:
                     created_at = datetime.fromtimestamp(ts, tz=TZ).isoformat()
                 elif ts > 0:
-                    created_at = str(ts)
+                    created_at = str(int(ts))
             elif isinstance(ts, str) and ts.strip():
                 created_at = ts.strip()
             if created_at:
