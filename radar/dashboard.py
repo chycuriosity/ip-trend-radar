@@ -27,6 +27,42 @@ REPO = "chycuriosity/ip-trend-radar"
 
 st.set_page_config(page_title="IP Trend Radar", page_icon="", layout="wide")
 
+# ---- Background tracking poll ----
+if "track_pid" in st.session_state:
+    import subprocess as _sp
+    out_dir = Path(st.session_state["track_output"])
+    done_file = out_dir / "DONE"
+    log_file = out_dir / "track.log"
+
+    if done_file.exists():
+        result = done_file.read_text().strip()
+        elapsed = time.time() - st.session_state["track_start"]
+        if result.startswith("ERROR"):
+            st.warning(f"Tracking failed: {result} ({elapsed:.0f}s)")
+        else:
+            count = int(result) if result.isdigit() else 0
+            load_topics.clear()
+            st.success(f"Tracking complete: {count} items in {elapsed:.0f}s. Select 'Topic Detail' in nav.")
+            st.session_state["sel_topic"] = st.session_state["track_topic"]
+        del st.session_state["track_pid"]
+        del st.session_state["track_topic"]
+        del st.session_state["track_output"]
+        del st.session_state["track_start"]
+        time.sleep(1)
+        st.rerun()
+    else:
+        elapsed = time.time() - st.session_state["track_start"]
+        log_tail = ""
+        if log_file.exists():
+            lines = log_file.read_text(encoding="utf-8", errors="replace").split("\n")
+            for line in reversed(lines[-5:]):
+                if line.strip() and ("searching" in line.lower() or "OK:" in line or "crawler" in line.lower()):
+                    log_tail = line.strip()[:120]
+                    break
+
+        st.info(f"Tracking in background ({elapsed:.0f}s elapsed). {log_tail}")
+        time.sleep(3)
+        st.rerun()
 
 @st.cache_data(ttl=300)
 def load_topics():
@@ -59,27 +95,35 @@ def download_latest_data():
 
 
 def run_track_local(topic: str, keywords: str):
-    status = st.empty()
-    progress = st.progress(0, "Starting browser...")
-    status.info(f"Tracking: {topic} (4 platforms, ~10 min)")
+    """Launch tracking in a background subprocess, poll for completion."""
+    kw = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else [topic]
+    kw_str = ",".join(kw)
 
-    try:
-        from radar.track import run_tracking
-        kw = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else [topic]
-        results = run_tracking(topic, kw)
-        progress.progress(100, "Done!")
-        progress.empty()
-        if results:
-            status.success(f"Found {len(results)} items")
-        else:
-            status.warning("No content found, try different keywords")
-        load_topics.clear()
-        st.session_state["sel_topic"] = topic
-        return results
-    except Exception as e:
-        progress.empty()
-        status.error(f"Failed: {e}")
-        return []
+    # Build command to run tracking as standalone script
+    script = Path(__file__).parent / "track_runner.py"
+    python = sys.executable
+    output_dir = Path("data") / "tracking" / topic.replace("/", "_")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    done_file = output_dir / "DONE"
+    log_file = output_dir / "track.log"
+
+    cmd = [
+        python, str(script),
+        "--topic", topic,
+        "--keywords", kw_str,
+        "--output-dir", str(output_dir),
+    ]
+
+    import subprocess
+    # Start background process
+    with open(log_file, "w", encoding="utf-8") as lf:
+        proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)
+
+    st.session_state["track_pid"] = proc.pid
+    st.session_state["track_topic"] = topic
+    st.session_state["track_output"] = str(output_dir)
+    st.session_state["track_start"] = time.time()
+    st.info(f"Tracking started in background (PID: {proc.pid}). This page will auto-refresh.")
 
 
 def run_discover():
