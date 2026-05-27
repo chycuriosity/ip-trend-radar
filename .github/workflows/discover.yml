@@ -1,0 +1,42 @@
+name: Discover Hot Topics
+
+on:
+  schedule:
+    - cron: '7 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Download previous data
+        uses: actions/download-artifact@v4
+        with:
+          name: trend-data
+          path: data/
+        continue-on-error: true
+
+      - name: Run discovery
+        env:
+          HF_ENDPOINT: https://hf-mirror.com
+          PYTHONIOENCODING: utf-8
+        run: uv run python run.py discover
+
+      - name: Upload data artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trend-data
+          path: data/trend_radar.db
+          retention-days: 7

@@ -1,0 +1,17 @@
+[project]
+name = "ip-trend-radar"
+version = "0.1.0"
+description = "IP Trend Radar - Hot topic discovery and propagation tracking"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.32",
+    "pyyaml>=6.0",
+    "sentence-transformers>=5.0",
+    "python-dotenv>=1.0",
+    "pandas>=2.0",
+    "jieba>=0.42",
+    "litellm>=1.0",
+]
+
+[project.optional-dependencies]
+dashboard = ["streamlit>=1.50", "plotly>=5.0"]

@@ -1,0 +1,66 @@
+name: Track Topic
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Topic label'
+        required: true
+        type: string
+      keywords:
+        description: 'Search keywords (comma separated)'
+        required: true
+        type: string
+      platforms:
+        description: 'Platforms (wb,bili,zhihu,xhs or leave empty for all)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install main deps
+        run: uv sync
+
+      - name: Setup MediaCrawler
+        working-directory: crawler
+        run: |
+          uv sync
+          uv run playwright install chromium --with-deps
+
+      - name: Download existing data
+        uses: actions/download-artifact@v4
+        with:
+          name: trend-data
+          path: data/
+        continue-on-error: true
+
+      - name: Run tracking
+        env:
+          WB_COOKIE: ${{ secrets.WB_COOKIE }}
+          BILI_COOKIE: ${{ secrets.BILI_COOKIE }}
+          ZHIHU_COOKIE: ${{ secrets.ZHIHU_COOKIE }}
+          XHS_COOKIE: ${{ secrets.XHS_COOKIE }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          uv run python run.py track "${{ inputs.topic }}" \
+            --keywords "${{ inputs.keywords }}" \
+            ${{ inputs.platforms && format('--platforms {0}', inputs.platforms) || '' }}
+
+      - name: Upload updated data
+        uses: actions/upload-artifact@v4
+        with:
+          name: trend-data
+          path: data/trend_radar.db
+          retention-days: 7

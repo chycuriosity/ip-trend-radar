@@ -1,0 +1,51 @@
+# IP Trend Radar 配置文件
+# 敏感信息（Cookie、API Key）通过环境变量 .env 注入
+
+# 热榜平台列表 (NewsNow API IDs)
+platforms:
+  - id: weibo
+    name: 微博
+  - id: douyin
+    name: 抖音
+  - id: bilibili-hot-search
+    name: B站
+  - id: zhihu
+    name: 知乎
+  - id: toutiao
+    name: 今日头条
+  - id: baidu
+    name: 百度热搜
+  - id: tieba
+    name: 贴吧
+
+# 深度追踪平台 (MediaCrawler)
+tracking_platforms:
+  - id: wb
+    name: 微博
+    cookie_env: WB_COOKIE
+  - id: bili
+    name: B站
+    cookie_env: BILI_COOKIE
+  - id: zhihu
+    name: 知乎
+    cookie_env: ZHIHU_COOKIE
+  - id: xhs
+    name: 小红书
+    cookie_env: XHS_COOKIE
+
+# 自动深度追踪触发条件
+auto_track:
+  min_heat_score: 80        # 热度分 ≥ 80
+  min_platforms: 3           # 跨平台数 ≥ 3
+  must_be_new: true          # 必须是新热点
+
+# 聚类参数
+clustering:
+  similarity_threshold: 0.65  # 余弦相似度阈值
+  min_platforms_for_trend: 2  # 至少出现在几个平台才算趋势
+
+# AI 分析
+ai:
+  model: ${AI_MODEL:-deepseek-chat}
+  api_key: ${AI_API_KEY:-}
+  api_base: ${AI_API_BASE:-https://api.deepseek.com/v1}
