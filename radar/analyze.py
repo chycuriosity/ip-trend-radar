@@ -18,9 +18,10 @@ def analyze_propagation(topic_label: str) -> dict:
         return {"topic_label": topic_label, "propagation_path": [], "origin_platform": None}
 
     # Group by platform, find earliest content
+    # Use content_created_at or crawl_time as fallback
     platform_first = defaultdict(list)
     for item in items:
-        ts = item.get("content_created_at", "")
+        ts = item.get("content_created_at", "") or item.get("crawl_time", "")
         if ts:
             platform_first[item["platform"]].append(ts)
 
@@ -32,9 +33,12 @@ def analyze_propagation(topic_label: str) -> dict:
 
     path = sorted(platform_earliest.items(), key=lambda x: x[1])
 
+    if not path:
+        return {"topic_label": topic_label, "propagation_path": [], "origin_platform": None}
+
     result = [{
-        "platform": p,
-        "first_seen": t,
+        "platform": path[0][0],
+        "first_seen": path[0][1],
         "delay": "0h",
     }]
 

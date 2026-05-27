@@ -35,19 +35,25 @@ def load_config(path: str = "config.yaml") -> dict:
 
 
 def _normalize_item(item: dict, platform: str, topic_label: str) -> Optional[dict]:
-    title = item.get("title") or item.get("display_title") or item.get("desc", "")
-    if not title:
+    title = (item.get("title") or item.get("display_title") or
+             item.get("desc") or item.get("content", ""))
+    if not title or len(str(title)) < 2:
+        return None
+
+    # Skip comment-only entries
+    if "comment_id" in item and "note_id" not in item and "id" not in item:
         return None
 
     likes = comments = shares = views = collects = 0
     author_name = ""
-    content_id = str(item.get("id", ""))
+    content_id = str(item.get("id") or item.get("note_id") or item.get("mblogid") or
+                     item.get("aid") or item.get("bvid") or "")
 
     if platform == "wb":
         likes = int(item.get("attitudes_count", 0))
         comments = int(item.get("comments_count", 0))
         shares = int(item.get("reposts_count", 0))
-        content_id = str(item.get("mblogid", content_id))
+        content_id = str(item.get("mblogid") or item.get("note_id") or content_id)
         user = item.get("user", {}) if isinstance(item.get("user"), dict) else {}
         author_name = user.get("screen_name", "")
     elif platform == "bili":
@@ -56,7 +62,7 @@ def _normalize_item(item: dict, platform: str, topic_label: str) -> Optional[dic
         comments = int(stat.get("reply", 0))
         shares = int(stat.get("share", 0))
         views = int(stat.get("view", 0))
-        content_id = str(item.get("aid", item.get("bvid", content_id)))
+        content_id = str(item.get("aid") or item.get("bvid") or content_id)
         owner = item.get("owner", {}) if isinstance(item.get("owner"), dict) else {}
         author_name = owner.get("name", "")
     elif platform == "zhihu":
@@ -69,9 +75,9 @@ def _normalize_item(item: dict, platform: str, topic_label: str) -> Optional[dic
         comments = int(item.get("comment_count", 0))
         shares = int(item.get("shared_count", 0))
         collects = int(item.get("collected_count", 0))
-        content_id = str(item.get("note_id", item.get("id", "")))
+        content_id = str(item.get("note_id") or content_id)
         user = item.get("user", {}) if isinstance(item.get("user"), dict) else {}
-        author_name = user.get("nickname", user.get("nick_name", ""))
+        author_name = user.get("nickname") or user.get("nick_name", "")
 
     return {
         "topic_label": topic_label,
